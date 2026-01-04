@@ -240,9 +240,10 @@ export const useDisplayModelsStore = defineStore('display-models', () => {
     }
     else if (format === DisplayModelFormat.PNGtuber) {
       const previewImage = await loadPNGtuberModelPreview(file)
-      if (previewImage) {
-        newDisplayModel.previewImage = previewImage
-      }
+      if (!previewImage)
+        return
+
+      newDisplayModel.previewImage = previewImage
     }
 
     displayModels.value.unshift(newDisplayModel)
