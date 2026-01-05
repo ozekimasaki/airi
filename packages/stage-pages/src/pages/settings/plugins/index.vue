@@ -56,7 +56,7 @@ const pluginsList = computed(() =>
       flex="~ col items-center justify-center"
       py-12
     >
-      <div text-6xl text-neutral-300 i-solar:plug-circle-bold-duotone dark:text-neutral-600 />
+      <div text-6xl text-neutral-300 i-solar:plug-circle-bold-duotone dark:text-neutral-600></div>
       <p mt-4 text-neutral-500 dark:text-neutral-400>
         {{ t('settings.pages.plugins.empty') }}
       </p>
@@ -68,7 +68,7 @@ const pluginsList = computed(() =>
       flex="~ col items-center justify-center"
       py-12
     >
-      <div text-4xl text-primary-500 i-svg-spinners:ring-resize />
+      <div text-4xl text-primary-500 i-svg-spinners:ring-resize></div>
       <p mt-4 text-neutral-500 dark:text-neutral-400>
         {{ t('settings.pages.plugins.loading') }}
       </p>
@@ -78,9 +78,9 @@ const pluginsList = computed(() =>
     <div
       v-if="pluginsStore.error"
       flex="~ col items-center justify-center"
-      rounded-lg bg-red-50 p-4 dark:bg-red-900/20
+      rounded-lg bg-red-50 p-4 class="dark:bg-red-900/20"
     >
-      <div text-4xl text-red-500 i-solar:danger-triangle-bold-duotone />
+      <div text-4xl text-red-500 i-solar:danger-triangle-bold-duotone></div>
       <p mt-2 text-red-600 dark:text-red-400>
         {{ pluginsStore.error }}
       </p>
@@ -97,7 +97,7 @@ const pluginsList = computed(() =>
   <!-- Background decoration -->
   <div
     v-motion
-    text="neutral-200/50 dark:neutral-600/20" pointer-events-none
+    class="text-neutral-200/50 dark:text-neutral-600/20" pointer-events-none
     fixed top="[calc(100dvh-15rem)]" bottom-0 right--5 z--1
     :initial="{ scale: 0.9, opacity: 0, y: 20 }"
     :enter="{ scale: 1, opacity: 1, y: 0 }"

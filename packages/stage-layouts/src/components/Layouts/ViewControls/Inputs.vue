@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useModelStore } from '@proj-airi/stage-ui-three'
 import { useLive2d } from '@proj-airi/stage-ui/stores/live2d'
+import { usePNGtuberStore } from '@proj-airi/stage-ui/stores/pngtuber'
 import { useSettings } from '@proj-airi/stage-ui/stores/settings'
 import { RoundRange } from '@proj-airi/ui'
 import { storeToRefs } from 'pinia'
@@ -13,6 +14,7 @@ const props = defineProps<{
 const { stageModelRenderer, stageViewControlsEnabled } = storeToRefs(useSettings())
 const { scale: vrmScale, modelOffset: vrmPosition, modelSize: vrmModelSize } = storeToRefs(useModelStore())
 const { scale: live2dScale, position: live2dPosition } = storeToRefs(useLive2d())
+const { scale: pngtuberScale, position: pngtuberPosition } = storeToRefs(usePNGtuberStore())
 
 const viewControlsValueX = computed({
   get: () => {
@@ -21,6 +23,8 @@ const viewControlsValueX = computed({
         return live2dPosition.value.x
       case 'vrm':
         return vrmPosition.value.x
+      case 'pngtuber':
+        return pngtuberPosition.value.x
       default:
         return 0
     }
@@ -33,6 +37,9 @@ const viewControlsValueX = computed({
       case 'vrm':
         vrmPosition.value.x = value
         break
+      case 'pngtuber':
+        pngtuberPosition.value.x = value
+        break
       default:
         break
     }
@@ -40,11 +47,20 @@ const viewControlsValueX = computed({
 })
 
 const viewControlsValueXMin = computed(() => {
-  return stageModelRenderer.value === 'live2d' ? -500 : -vrmModelSize.value.x - 10
+  if (stageModelRenderer.value === 'live2d' || stageModelRenderer.value === 'pngtuber')
+    return -500
+
+  return -vrmModelSize.value.x - 10
 })
 
 const viewControlsValueXMax = computed(() => {
-  return stageModelRenderer.value === 'vrm' ? 500 : vrmModelSize.value.x + 10
+  if (stageModelRenderer.value === 'vrm')
+    return 500
+
+  if (stageModelRenderer.value === 'pngtuber')
+    return 500
+
+  return vrmModelSize.value.x + 10
 })
 
 const viewControlsValueY = computed({
@@ -54,6 +70,8 @@ const viewControlsValueY = computed({
         return live2dPosition.value.y
       case 'vrm':
         return vrmPosition.value.y
+      case 'pngtuber':
+        return pngtuberPosition.value.y
       default:
         return 0
     }
@@ -66,6 +84,9 @@ const viewControlsValueY = computed({
       case 'vrm':
         vrmPosition.value.y = value
         break
+      case 'pngtuber':
+        pngtuberPosition.value.y = value
+        break
       default:
         break
     }
@@ -73,11 +94,20 @@ const viewControlsValueY = computed({
 })
 
 const viewControlsValueYMin = computed(() => {
-  return stageModelRenderer.value === 'live2d' ? -500 : -vrmModelSize.value.y - 10
+  if (stageModelRenderer.value === 'live2d' || stageModelRenderer.value === 'pngtuber')
+    return -500
+
+  return -vrmModelSize.value.y - 10
 })
 
 const viewControlsValueYMax = computed(() => {
-  return stageModelRenderer.value === 'vrm' ? 500 : vrmModelSize.value.y + 10
+  if (stageModelRenderer.value === 'vrm')
+    return 500
+
+  if (stageModelRenderer.value === 'pngtuber')
+    return 500
+
+  return vrmModelSize.value.y + 10
 })
 
 const viewControlsValueZ = computed({
@@ -117,12 +147,18 @@ const viewControlsValueScale = computed({
     if (stageModelRenderer.value === 'live2d') {
       return live2dScale.value
     }
+    if (stageModelRenderer.value === 'pngtuber') {
+      return pngtuberScale.value
+    }
 
     return vrmScale.value
   },
   set: (value) => {
     if (stageModelRenderer.value === 'live2d') {
       live2dScale.value = value
+    }
+    else if (stageModelRenderer.value === 'pngtuber') {
+      pngtuberScale.value = value
     }
     else {
       vrmScale.value = value

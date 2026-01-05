@@ -35,6 +35,7 @@ function isYouTubeConfig(config: unknown): config is YouTubeModuleConfig {
     && (typeof c.clientId === 'string' || typeof c.clientId === 'undefined')
     && (typeof c.clientSecret === 'string' || typeof c.clientSecret === 'undefined')
     && (typeof c.streamUrl === 'string' || typeof c.streamUrl === 'undefined')
+    && (typeof c.startOAuth === 'boolean' || typeof c.startOAuth === 'undefined')
 }
 
 export class YouTubeLiveChatPlugin {

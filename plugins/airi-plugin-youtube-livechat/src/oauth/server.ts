@@ -1,5 +1,6 @@
-import { createApp, createRouter, defineEventHandler, getQuery } from 'h3'
-import { listen, type Listener } from 'listhen'
+import { createServer, type Server } from 'node:http'
+import { URL } from 'node:url'
+
 import open from 'open'
 
 import { useLogg } from '@guiiai/logg'
@@ -23,8 +24,7 @@ export interface OAuthServerConfig {
 }
 
 export class OAuthServer {
-  private app = createApp()
-  private listener: Listener | null = null
+  private server: Server | null = null
   private clientId: string
   private clientSecret: string
   private tokenStore: TokenStore
@@ -40,8 +40,6 @@ export class OAuthServer {
     this.clientSecret = config.clientSecret
     this.tokenStore = config.tokenStore
     this.port = config.port || OAUTH_PORT
-
-    this.setupRoutes()
   }
 
   updateCredentials(clientId: string, clientSecret: string): void {
@@ -49,51 +47,63 @@ export class OAuthServer {
     this.clientSecret = clientSecret
   }
 
-  private setupRoutes(): void {
-    const router = createRouter()
+  private createServer(): Server {
+    return createServer(async (req, res) => {
+      const url = new URL(req.url || '/', `http://127.0.0.1:${this.port}`)
 
-    // OAuth callback handler
-    router.get('/oauth/google/callback', defineEventHandler(async (event) => {
-      const query = getQuery(event)
-      const { code, state, error } = query as { code?: string, state?: string, error?: string }
+      if (url.pathname === '/oauth/google/callback') {
+        const code = url.searchParams.get('code')
+        const state = url.searchParams.get('state')
+        const error = url.searchParams.get('error')
 
-      if (error) {
-        log.error('OAuth error:', error)
-        this.authResolve?.(false)
-        return 'Authentication failed. You can close this window.'
+        res.setHeader('Content-Type', 'text/html; charset=utf-8')
+
+        if (error) {
+          log.error('OAuth error:', error)
+          this.authResolve?.(false)
+          res.end('<html><body><h1>Authentication failed</h1><p>You can close this window.</p></body></html>')
+          return
+        }
+
+        if (!code || !state) {
+          log.error('Missing code or state in callback')
+          this.authResolve?.(false)
+          res.end('<html><body><h1>Invalid callback</h1><p>You can close this window.</p></body></html>')
+          return
+        }
+
+        // Verify state
+        if (state !== this.state) {
+          log.error('State mismatch')
+          this.authResolve?.(false)
+          res.end('<html><body><h1>Security error</h1><p>State mismatch. You can close this window.</p></body></html>')
+          return
+        }
+
+        try {
+          // Exchange code for tokens
+          await this.exchangeCodeForTokens(code)
+          log.log('Successfully authenticated with Google')
+          this.authResolve?.(true)
+          res.end('<html><body><h1>Authentication successful!</h1><p>You can close this window and return to AIRI.</p></body></html>')
+        }
+        catch (err) {
+          log.withError(err).error('Failed to exchange code for tokens')
+          this.authResolve?.(false)
+          res.end('<html><body><h1>Authentication failed</h1><p>You can close this window.</p></body></html>')
+        }
+        return
       }
 
-      if (!code || !state) {
-        log.error('Missing code or state in callback')
-        this.authResolve?.(false)
-        return 'Invalid callback. You can close this window.'
+      if (url.pathname === '/health') {
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ status: 'ok' }))
+        return
       }
 
-      // Verify state
-      if (state !== this.state) {
-        log.error('State mismatch')
-        this.authResolve?.(false)
-        return 'Security error: state mismatch. You can close this window.'
-      }
-
-      try {
-        // Exchange code for tokens
-        await this.exchangeCodeForTokens(code)
-        log.log('Successfully authenticated with Google')
-        this.authResolve?.(true)
-        return 'Authentication successful! You can close this window and return to AIRI.'
-      }
-      catch (err) {
-        log.withError(err).error('Failed to exchange code for tokens')
-        this.authResolve?.(false)
-        return 'Authentication failed. You can close this window.'
-      }
-    }))
-
-    // Health check
-    router.get('/health', defineEventHandler(() => ({ status: 'ok' })))
-
-    this.app.use(router)
+      res.statusCode = 404
+      res.end('Not found')
+    })
   }
 
   private async exchangeCodeForTokens(code: string): Promise<void> {
@@ -249,28 +259,39 @@ export class OAuthServer {
   }
 
   async start(): Promise<void> {
-    if (this.listener) {
+    if (this.server) {
       return
     }
 
-    try {
-      this.listener = await listen(this.app, {
-        port: this.port,
-        showURL: false,
+    return new Promise((resolve, reject) => {
+      this.server = this.createServer()
+
+      this.server.on('error', (error: NodeJS.ErrnoException) => {
+        if (error.code === 'EADDRINUSE') {
+          log.error(`Port ${this.port} is already in use`)
+        }
+        else {
+          log.withError(error).error('Failed to start OAuth server')
+        }
+        reject(error)
       })
-      log.log(`OAuth callback server listening on port ${this.port}`)
-    }
-    catch (error) {
-      log.withError(error).error('Failed to start OAuth server')
-      throw error
-    }
+
+      this.server.listen(this.port, '127.0.0.1', () => {
+        log.log(`OAuth callback server listening on port ${this.port}`)
+        resolve()
+      })
+    })
   }
 
   async stop(): Promise<void> {
-    if (this.listener) {
-      await this.listener.close()
-      this.listener = null
-      log.log('OAuth server stopped')
+    if (this.server) {
+      return new Promise((resolve) => {
+        this.server!.close(() => {
+          this.server = null
+          log.log('OAuth server stopped')
+          resolve()
+        })
+      })
     }
   }
 }
