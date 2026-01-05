@@ -118,6 +118,8 @@ export const useSettings = defineStore('settings', () => {
 
   const [allowVisibleOnAllWorkspaces, resetAllowVisibleOnAllWorkspaces] = createResettableLocalStorage('settings/allow-visible-on-all-workspaces', true)
 
+  const [assistantCharacterName, resetAssistantCharacterName] = createResettableLocalStorage('settings/chat/assistant-character-name', '')
+
   function getLanguage() {
     let language = localStorage.getItem('settings/language')
 
@@ -189,6 +191,8 @@ export const useSettings = defineStore('settings', () => {
     resetThemeColorsHueDynamic()
 
     resetAllowVisibleOnAllWorkspaces()
+
+    resetAssistantCharacterName()
 
     await updateStageModel()
   }
