@@ -1,0 +1,23 @@
+{
+  "name": "@proj-airi/airi-plugin-youtube-livechat",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "YouTube Live Chat integration plugin for AIRI - reads live chat messages and sends them as input:text events",
+  "scripts": {
+    "build": "tsdown",
+    "start": "tsx --env-file=.env --env-file-if-exists=.env.local src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@guiiai/logg": "catalog:",
+    "@proj-airi/server-sdk": "workspace:*",
+    "googleapis": "^144.0.0",
+    "h3": "^1.15.3",
+    "listhen": "^1.9.0",
+    "open": "^10.1.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0"
+  }
+}
