@@ -43,11 +43,18 @@ const imageCache = ref<Map<string, HTMLImageElement>>(new Map())
 const imageUrls = ref<Map<string, string>>(new Map())
 const loadedModel = ref<PNGtuberLoadedModel | null>(null)
 
+// Animation constants
+const BLINK_DURATION_MS = 150
+const BLINK_INTERVAL_MIN_MS = 3000
+const BLINK_INTERVAL_MAX_MS = 5000
+const MOUTH_PAC_BASE_INTERVAL_MS = 150
+const CANVAS_RESOLUTION_MULTIPLIER = 2
+
 // Blink state
 const blinkState = ref({
   isBlinking: false,
   blinkTimer: 0,
-  nextBlinkTime: 3000 + Math.random() * 5000,
+  nextBlinkTime: BLINK_INTERVAL_MIN_MS + Math.random() * (BLINK_INTERVAL_MAX_MS - BLINK_INTERVAL_MIN_MS),
 })
 
 // Mouth pac animation state (for lip sync during speech)
@@ -60,6 +67,7 @@ const mouthPacState = ref({
 // Animation frame ID
 let animationFrameId: number | null = null
 let lastTime = 0
+let resizeObserver: ResizeObserver | null = null
 
 // Computed current sprite based on state
 const currentSprite = computed(() => {
@@ -95,7 +103,7 @@ function getMouthSprite(): string | null {
 
   // Use configurable threshold from store (default: 0.15 for more responsive lip sync)
   const threshold = mouthOpenThreshold.value ?? 0.15
-  
+
   // If speaking (mouthOpenSize > threshold), animate mouth pac
   if (props.mouthOpenSize > threshold) {
     // Use pac animation state for natural lip sync
@@ -106,7 +114,7 @@ function getMouthSprite(): string | null {
   return mouthClosed ?? null
 }
 
-// Load image and cache it
+// Load image and cache it (async, for preloading)
 async function loadImage(src: string): Promise<HTMLImageElement | null> {
   if (!src)
     return null
@@ -131,6 +139,13 @@ async function loadImage(src: string): Promise<HTMLImageElement | null> {
     }
     img.src = fullSrc
   })
+}
+
+// Get cached image synchronously (for render loop)
+function getCachedImage(src: string | null | undefined): HTMLImageElement | null {
+  if (!src)
+    return null
+  return imageCache.value.get(src) ?? null
 }
 
 // Preload all images from manifest
@@ -176,20 +191,24 @@ async function preloadImages() {
   await Promise.all(imagesToLoad.map(loadImage))
 }
 
-// Render frame
-async function render(timestamp: number) {
+// Render frame (synchronous for proper frame timing)
+function render(timestamp: number) {
   if (props.paused) {
     animationFrameId = requestAnimationFrame(render)
     return
   }
 
   const canvas = canvasRef.value
-  if (!canvas)
+  if (!canvas) {
+    animationFrameId = requestAnimationFrame(render)
     return
+  }
 
   const ctx = canvas.getContext('2d')
-  if (!ctx)
+  if (!ctx) {
+    animationFrameId = requestAnimationFrame(render)
     return
+  }
 
   const deltaTime = timestamp - lastTime
   lastTime = timestamp
@@ -202,8 +221,8 @@ async function render(timestamp: number) {
       setTimeout(() => {
         blinkState.value.isBlinking = false
         blinkState.value.blinkTimer = 0
-        blinkState.value.nextBlinkTime = 3000 + Math.random() * 5000
-      }, 150)
+        blinkState.value.nextBlinkTime = BLINK_INTERVAL_MIN_MS + Math.random() * (BLINK_INTERVAL_MAX_MS - BLINK_INTERVAL_MIN_MS)
+      }, BLINK_DURATION_MS)
     }
   }
 
@@ -212,8 +231,7 @@ async function render(timestamp: number) {
   if (props.mouthOpenSize > threshold) {
     // Speaking: animate mouth pac based on mouthOpenSize
     // Higher mouthOpenSize = faster pac (more frequent open/close)
-    // Base interval: 100-200ms, adjusted by mouthOpenSize (0.15-1.0 range)
-    const baseInterval = 150 // ms
+    const baseInterval = MOUTH_PAC_BASE_INTERVAL_MS
     const speedMultiplier = Math.max(0.5, Math.min(2.0, props.mouthOpenSize / threshold))
     const pacInterval = baseInterval / speedMultiplier
 
@@ -232,17 +250,22 @@ async function render(timestamp: number) {
   // Clear canvas
   ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-  if (!currentSprite.value)
+  if (!currentSprite.value) {
+    animationFrameId = requestAnimationFrame(render)
     return
+  }
 
   // Determine which base sprite to show
   const baseSpriteSrc = blinkState.value.isBlinking && currentSprite.value.blink
     ? currentSprite.value.blink
     : currentSprite.value.base
 
-  const baseImage = await loadImage(baseSpriteSrc)
-  if (!baseImage)
+  // Use synchronous cached image lookup (images are preloaded)
+  const baseImage = getCachedImage(baseSpriteSrc)
+  if (!baseImage) {
+    animationFrameId = requestAnimationFrame(render)
     return
+  }
 
   // Calculate position and scale
   const scaleValue = scale.value
@@ -254,13 +277,11 @@ async function render(timestamp: number) {
   // Draw base sprite
   ctx.drawImage(baseImage, x, y, imgWidth, imgHeight)
 
-  // Draw mouth overlay if available
+  // Draw mouth overlay if available (synchronous)
   const mouthSpriteSrc = getMouthSprite()
-  if (mouthSpriteSrc) {
-    const mouthImage = await loadImage(mouthSpriteSrc)
-    if (mouthImage) {
-      ctx.drawImage(mouthImage, x, y, imgWidth, imgHeight)
-    }
+  const mouthImage = getCachedImage(mouthSpriteSrc)
+  if (mouthImage) {
+    ctx.drawImage(mouthImage, x, y, imgWidth, imgHeight)
   }
 
   animationFrameId = requestAnimationFrame(render)
@@ -330,8 +351,10 @@ const handleResize = useDebounceFn(() => {
     return
 
   const rect = containerRef.value.getBoundingClientRect()
-  canvasRef.value.width = rect.width * 2
-  canvasRef.value.height = rect.height * 2
+  if (rect.width > 0 && rect.height > 0) {
+    canvasRef.value.width = rect.width * CANVAS_RESOLUTION_MULTIPLIER
+    canvasRef.value.height = rect.height * CANVAS_RESOLUTION_MULTIPLIER
+  }
 }, 100)
 
 // Start animation loop
@@ -366,12 +389,24 @@ onMounted(() => {
   startAnimation()
 
   window.addEventListener('resize', handleResize)
+
+  // Use ResizeObserver to watch for container size changes
+  if (containerRef.value) {
+    resizeObserver = new ResizeObserver(() => {
+      handleResize()
+    })
+    resizeObserver.observe(containerRef.value)
+  }
 })
 
 onUnmounted(() => {
   stopAnimation()
   cleanupModel()
   window.removeEventListener('resize', handleResize)
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver = null
+  }
 })
 
 function canvasElement() {
